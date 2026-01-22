@@ -422,7 +422,7 @@ kubectl describe tcproute redis2-tcproute -n default
 
 **Ожидаемый результат:** `TCPRoute`‑ресурсы созданы, статус `Accepted: True`, привязаны к Gateway.
 
-#### Тестирование TLS‑соединения (через TCPRoute)
+#### Тестирование TLS‑соединения (через openssl)
 
 ```bash
 # Получение IP‑адреса (из Gateway status)
