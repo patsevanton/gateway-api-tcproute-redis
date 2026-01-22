@@ -770,6 +770,7 @@ spec:
       args: ["SET", "redis1key", "redis1"]
 EOF
 
+sleep 5
 kubectl logs -f pod/redis1-test
 kubectl delete pod redis1-test --wait=false
 ```
@@ -812,6 +813,7 @@ spec:
       args: ["SET", "redis2key", "redis2"]
 EOF
 
+sleep 5
 kubectl logs -f pod/redis2-test
 kubectl delete pod redis2-test --wait=false
 ```
@@ -855,6 +857,7 @@ spec:
       args: ["KEYS", "*"]
 EOF
 
+sleep 5
 kubectl logs -f pod/redis1-test
 kubectl delete pod redis1-test --wait=false
 ```
@@ -898,6 +901,7 @@ spec:
       args: ["KEYS", "*"]
 EOF
 
+sleep 5
 kubectl logs -f pod/redis2-test
 kubectl delete pod redis2-test --wait=false
 ```
@@ -942,6 +946,7 @@ spec:
       args: ["FLUSHDB"]
 EOF
 
+sleep 5
 kubectl logs -f pod/redis1-test
 kubectl delete pod redis1-test --wait=false
 ```
@@ -979,6 +984,7 @@ spec:
       args: ["FLUSHDB"]
 EOF
 
+sleep 5
 kubectl logs -f pod/redis2-test
 kubectl delete pod redis2-test --wait=false
 ```
