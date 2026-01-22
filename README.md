@@ -725,7 +725,7 @@ ENTRYPOINT ["/app/redis-client"]
 CMD []
 ```
 
-Для тестирования используется готовый Docker‑образ `ghcr.io/patsevanton/gateway-api-tcproute-redis:1.8.0`.
+Для тестирования используется готовый Docker‑образ `ghcr.io/patsevanton/gateway-api-tcproute-redis:1.0.0`.
 
 ### Установка `app1`/`app2` (клиенты) с Root CA из Kubernetes Secret
 
@@ -763,7 +763,7 @@ spec:
             path: ca.crt
   containers:
     - name: redis1-test
-      image: ghcr.io/patsevanton/gateway-api-tcproute-redis:1.8.0
+      image: ghcr.io/patsevanton/gateway-api-tcproute-redis:1.0.0
       env:
         - name: REDIS_HOST
           value: redis1.apatsev.org.ru
@@ -805,7 +805,7 @@ spec:
             path: ca.crt
   containers:
     - name: redis2-test
-      image: ghcr.io/patsevanton/gateway-api-tcproute-redis:1.8.0
+      image: ghcr.io/patsevanton/gateway-api-tcproute-redis:1.0.0
       env:
         - name: REDIS_HOST
           value: redis2.apatsev.org.ru
@@ -848,7 +848,7 @@ spec:
             path: ca.crt
   containers:
     - name: redis1-test
-      image: ghcr.io/patsevanton/gateway-api-tcproute-redis:1.8.0
+      image: ghcr.io/patsevanton/gateway-api-tcproute-redis:1.0.0
       env:
         - name: REDIS_HOST
           value: redis1.apatsev.org.ru
@@ -891,7 +891,7 @@ spec:
             path: ca.crt
   containers:
     - name: redis2-test
-      image: ghcr.io/patsevanton/gateway-api-tcproute-redis:1.8.0
+      image: ghcr.io/patsevanton/gateway-api-tcproute-redis:1.0.0
       env:
         - name: REDIS_HOST
           value: redis2.apatsev.org.ru
@@ -935,7 +935,7 @@ spec:
             path: ca.crt
   containers:
     - name: redis1-test
-      image: ghcr.io/patsevanton/gateway-api-tcproute-redis:1.8.0
+      image: ghcr.io/patsevanton/gateway-api-tcproute-redis:1.0.0
       env:
         - name: REDIS_HOST
           value: redis1.apatsev.org.ru
@@ -972,7 +972,7 @@ spec:
             path: ca.crt
   containers:
     - name: redis2-test
-      image: ghcr.io/patsevanton/gateway-api-tcproute-redis:1.8.0
+      image: ghcr.io/patsevanton/gateway-api-tcproute-redis:1.0.0
       env:
         - name: REDIS_HOST
           value: redis2.apatsev.org.ru
