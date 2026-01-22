@@ -1,0 +1,15 @@
+apiVersion: gateway.networking.k8s.io/v1alpha2
+kind: TCPRoute
+metadata:
+  name: tcproute-test
+  namespace: default
+spec:
+  parentRefs:
+  - name: eg-redis1
+    namespace: default
+    sectionName: tls-terminate-redis1
+  rules:
+  - backendRefs:
+    - name: redis-backend
+      port: 6379
+      weight: 100

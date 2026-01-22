@@ -1,0 +1,70 @@
+# Terraform файлы
+*.tf
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+
+# Kubernetes манифесты
+manifests/
+
+# Скрипты
+scripts/
+
+# Документация
+*.md
+README*
+CHANGELOG*
+LICENSE*
+
+# Docker файлы (уже используются для сборки)
+Dockerfile
+docker-entrypoint.sh
+docker-compose*.yml
+.dockerignore
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# IDE и редакторы
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+.circleci/
+
+# Тесты
+*_test.go
+testdata/
+*.test
+
+# Временные файлы
+*.log
+*.tmp
+*.temp
+.cache/
+
+# Envoy конфигурация (не используется в образе)
+envoyproxy.yaml
+envoyproxy.yaml.tpl
+
+# Build артефакты
+bin/
+dist/
+build/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Go специфичные
+vendor/
