@@ -1,5 +1,4 @@
 .cursorignore
-dns.tf
 .dockerignore
 envoy-gateway.tf
 envoyproxy.yaml

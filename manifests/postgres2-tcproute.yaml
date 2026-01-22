@@ -1,0 +1,15 @@
+apiVersion: gateway.networking.k8s.io/v1alpha2
+kind: TCPRoute
+metadata:
+  name: postgres2-tcproute
+  namespace: default
+spec:
+  parentRefs:
+  - name: eg-postgres2
+    namespace: default
+    sectionName: tls-terminate-postgres2
+  rules:
+  - backendRefs:
+    - name: postgres2
+      port: 5432
+      weight: 100

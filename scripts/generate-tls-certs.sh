@@ -49,6 +49,8 @@ subjectAltName = @alt_names
 DNS.1 = $WILDCARD
 DNS.2 = redis1.$DOMAIN
 DNS.3 = redis2.$DOMAIN
+DNS.4 = postgres1.$DOMAIN
+DNS.5 = postgres2.$DOMAIN
 EOF
 
 openssl genrsa -out "$TLS_KEY" 2048

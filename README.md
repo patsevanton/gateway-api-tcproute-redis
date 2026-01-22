@@ -16,7 +16,7 @@
 - Helm установлен.
 - DNS‑зона настроена (например, `apatsev.org.ru`).
 - Выделен статический IP‑адрес для Envoy Gateway.
-- Обе внешние DNS‑записи для Redis указывают на этот IP‑адрес.
+- Внешние DNS‑записи `redis1`, `redis2`, `postgres1`, `postgres2` указывают на этот IP‑адрес.
 
 
 ### Схема маршрутизации трафика
@@ -32,10 +32,14 @@
 **Важно:** В данной конфигурации каждый FQDN маршрутизируется строго на свой backend:
 - Трафик с `redis1.apatsev.org.ru` идёт **только** на backend `redis1` (через `TCPRoute` с `sectionName: tls-terminate-redis1`).
 - Трафик с `redis2.apatsev.org.ru` идёт **только** на backend `redis2` (через `TCPRoute` с `sectionName: tls-terminate-redis2`).
+- Трафик с `postgres1.apatsev.org.ru` идёт **только** на backend `postgres1` (через `TCPRoute` с `sectionName: tls-terminate-postgres1`).
+- Трафик с `postgres2.apatsev.org.ru` идёт **только** на backend `postgres2` (через `TCPRoute` с `sectionName: tls-terminate-postgres2`).
 
 Маршрутизация определяется на уровне Gateway `listener`‑ов:
 - `listener` `tls-terminate-redis1` с `hostname: "redis1.apatsev.org.ru"` → `TCPRoute` с `sectionName: tls-terminate-redis1` → backend `redis1`.
 - `listener` `tls-terminate-redis2` с `hostname: "redis2.apatsev.org.ru"` → `TCPRoute` с `sectionName: tls-terminate-redis2` → backend `redis2`.
+- `listener` `tls-terminate-postgres1` с `hostname: "postgres1.apatsev.org.ru"` → `TCPRoute` с `sectionName: tls-terminate-postgres1` → backend `postgres1`.
+- `listener` `tls-terminate-postgres2` с `hostname: "postgres2.apatsev.org.ru"` → `TCPRoute` с `sectionName: tls-terminate-postgres2` → backend `postgres2`.
 
 `TCPRoute` **не поддерживает** поле `hostnames`. Маршрутизация по `hostname` происходит на уровне Gateway `listener`‑а через `sectionName`, что обеспечивает строгую изоляцию трафика между разными FQDN.
 
@@ -77,7 +81,7 @@ spec:
           value:
             spec:
               type: LoadBalancer
-              loadBalancerIP: <STATIC_IP> # IP, на который указывают обе внешние DNS‑записи Redis
+              loadBalancerIP: <STATIC_IP> # IP, на который указывают внешние DNS‑записи redis1/redis2/postgres1/postgres2
 ```
 
 Применяем:
@@ -146,6 +150,8 @@ subjectAltName = @alt_names
 DNS.1 = $WILDCARD
 DNS.2 = redis1.$DOMAIN
 DNS.3 = redis2.$DOMAIN
+DNS.4 = postgres1.$DOMAIN
+DNS.5 = postgres2.$DOMAIN
 EOF
 
 openssl genrsa -out "$TLS_KEY" 2048
@@ -279,11 +285,15 @@ spec:
 ```bash
 kubectl apply -f manifests/gateway-redis1.yaml
 kubectl apply -f manifests/gateway-redis2.yaml
+kubectl apply -f manifests/gateway-postgres1.yaml
+kubectl apply -f manifests/gateway-postgres2.yaml
 
 # Проверка статуса Gateway
-kubectl get gateway eg-redis1 eg-redis2 -n default | grep -C 1 PROGRAMMED
+kubectl get gateway eg-redis1 eg-redis2 eg-postgres1 eg-postgres2 -n default | grep -C 1 PROGRAMMED
 kubectl describe gateway eg-redis1 -n default | grep -C 1 Accepted
 kubectl describe gateway eg-redis2 -n default | grep -C 1 Accepted
+kubectl describe gateway eg-postgres1 -n default | grep -C 1 Accepted
+kubectl describe gateway eg-postgres2 -n default | grep -C 1 Accepted
 ```
 
 **Ожидаемый результат:** Gateway‑ресурсы созданы, статус `PROGRAMMED: True` (в выводе `kubectl get`), условие `Accepted: True` (в условиях Gateway), адрес назначен (статический IP из Terraform).
@@ -358,6 +368,23 @@ kubectl get pods -l 'app in (redis1,redis2)'
 kubectl get svc redis1 redis2
 ```
 
+#### Создание backend‑приложений PostgreSQL (PostgreSQL 1 и PostgreSQL 2)
+
+Файлы `manifests/postgres1-statefulset.yaml` и `manifests/postgres2-statefulset.yaml` разворачивают `StatefulSet` + `PVC` + `Service` + `Secret`.
+
+**Важно:** обычный `psql` / libpq начинает соединение с `SSLRequest` (StartTLS), поэтому напрямую через `listener protocol: TLS` (когда TLS должен начинаться с первого байта) подключение может не заработать без дополнительного TLS‑туннеля на стороне клиента. Здесь PostgreSQL добавлен как backend и для демонстрации SNI/TLS handshake.
+
+Применение:
+
+```bash
+kubectl apply -f manifests/postgres1-statefulset.yaml
+kubectl apply -f manifests/postgres2-statefulset.yaml
+
+# Проверка
+kubectl get pods -l 'app in (postgres1,postgres2)'
+kubectl get svc postgres1 postgres2
+```
+
 #### Создание TCPRoute
 
 В режиме `tls.mode: Terminate` TLS завершается на уровне Gateway `listener`‑а (выбор `listener`‑а идёт по SNI/`hostname`), а `TCPRoute` маршрутизирует **уже расшифрованный** TCP‑трафик к backend.
@@ -413,11 +440,15 @@ spec:
 ```bash
 kubectl apply -f manifests/redis1-tcproute.yaml
 kubectl apply -f manifests/redis2-tcproute.yaml
+kubectl apply -f manifests/postgres1-tcproute.yaml
+kubectl apply -f manifests/postgres2-tcproute.yaml
 
 # Проверка статуса
-kubectl get tcproute redis1-tcproute redis2-tcproute -n default
+kubectl get tcproute redis1-tcproute redis2-tcproute postgres1-tcproute postgres2-tcproute -n default
 kubectl describe tcproute redis1-tcproute -n default
 kubectl describe tcproute redis2-tcproute -n default
+kubectl describe tcproute postgres1-tcproute -n default
+kubectl describe tcproute postgres2-tcproute -n default
 ```
 
 **Ожидаемый результат:** `TCPRoute`‑ресурсы созданы, статус `Accepted: True`, привязаны к Gateway.
@@ -444,6 +475,18 @@ openssl s_client -connect $GATEWAY_IP:443 \
   -servername redis2.apatsev.org.ru \
   -CAfile /tmp/gateway-ca.crt \
   -quiet 2>/dev/null
+
+# Тест 4: TLS handshake для PostgreSQL 1 (проверяем SNI/сертификат)
+openssl s_client -connect $GATEWAY_IP:443 \
+  -servername postgres1.apatsev.org.ru \
+  -CAfile /tmp/gateway-ca.crt \
+  -quiet
+
+# Тест 5: TLS handshake для PostgreSQL 2 (проверяем SNI/сертификат)
+openssl s_client -connect $GATEWAY_IP:443 \
+  -servername postgres2.apatsev.org.ru \
+  -CAfile /tmp/gateway-ca.crt \
+  -quiet
 
 # Ожидаемый ответ: +PONG (Redis протокол)
 # Если получен ответ PONG, это подтверждает:
