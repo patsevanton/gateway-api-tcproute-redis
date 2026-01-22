@@ -1,6 +1,7 @@
 .cursorignore
 .dockerignore
 envoy-gateway.tf
+envoyproxy.yaml
 envoyproxy.yaml.tpl
 .git
 .github
