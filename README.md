@@ -716,7 +716,7 @@ WORKDIR /app
 COPY --from=builder /build/redis-client .
 
 # Переменная окружения для выбора Redis хоста
-# REDIS_HOST может быть redis1.apatsev.org.ru или redis2.apatsev.org.ru
+# REDIS_HOST может быть redis1.apatsev.org.ru или redis2.apatsev.org.ru или любой другой
 ENV REDIS_HOST=redis1.apatsev.org.ru
 ENV REDIS_PORT=443
 
