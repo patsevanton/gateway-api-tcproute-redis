@@ -468,6 +468,263 @@ openssl s_client -connect $GATEWAY_IP:443 \
 
 ### Тестирование через Go‑приложение
 
+main.go:
+```
+package main
+
+import (
+	"context"
+	"crypto/tls"
+	"crypto/x509"
+	"fmt"
+	"net"
+	"os"
+	"path/filepath"
+	"time"
+
+	"github.com/redis/go-redis/v9"
+)
+
+func main() {
+	// Получение адреса Redis из переменной окружения
+	redisHost := os.Getenv("REDIS_HOST")
+	if redisHost == "" {
+		fmt.Fprintln(os.Stderr, "REDIS_HOST не установлен")
+		os.Exit(1)
+	}
+
+	redisPort := os.Getenv("REDIS_PORT")
+	if redisPort == "" {
+		redisPort = "443"
+	}
+
+	redisAddr := fmt.Sprintf("%s:%s", redisHost, redisPort)
+
+	fmt.Printf("Подключение к Redis через Gateway: %s\n", redisAddr)
+
+	// Проверка DNS разрешения
+	fmt.Printf("Проверка DNS для %s...\n", redisHost)
+	ips, err := net.LookupHost(redisHost)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Ошибка DNS разрешения: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("DNS разрешен: %v\n", ips)
+
+	// TLS конфигурация: по умолчанию проверяем сертификат через Root CA,
+	// который передается в контейнер через k8s Secret.
+	//
+	// - REDIS_CA_CERT: путь к ca.crt (по умолчанию /etc/redis-ca/ca.crt)
+	// - REDIS_INSECURE_SKIP_VERIFY=true: отключить проверку (не рекомендуется)
+	caPath := os.Getenv("REDIS_CA_CERT")
+	if caPath == "" {
+		caPath = "/etc/redis-ca/ca.crt"
+	}
+
+	insecure := os.Getenv("REDIS_INSECURE_SKIP_VERIFY") == "true"
+
+	tlsCfg := &tls.Config{
+		MinVersion: tls.VersionTLS12,
+		ServerName: redisHost,
+	}
+
+	if insecure {
+		tlsCfg.InsecureSkipVerify = true
+		fmt.Fprintln(os.Stderr, "Внимание: включен REDIS_INSECURE_SKIP_VERIFY=true (проверка TLS отключена)")
+	} else {
+		caBytes, err := os.ReadFile(filepath.Clean(caPath))
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Не удалось прочитать CA сертификат (%s): %v\n", caPath, err)
+			fmt.Fprintln(os.Stderr, "Смонтируйте Secret с ca.crt или установите REDIS_INSECURE_SKIP_VERIFY=true")
+			os.Exit(1)
+		}
+		pool := x509.NewCertPool()
+		if ok := pool.AppendCertsFromPEM(caBytes); !ok {
+			fmt.Fprintf(os.Stderr, "Не удалось распарсить CA сертификат (%s)\n", caPath)
+			os.Exit(1)
+		}
+		tlsCfg.RootCAs = pool
+	}
+
+	// Настройка Redis клиента с TLS
+	rdb := redis.NewClient(&redis.Options{
+		Addr: redisAddr,
+		TLSConfig: &tls.Config{
+			MinVersion:         tlsCfg.MinVersion,
+			ServerName:         tlsCfg.ServerName,
+			RootCAs:            tlsCfg.RootCAs,
+			InsecureSkipVerify: tlsCfg.InsecureSkipVerify,
+		},
+		DialTimeout:  5 * time.Second,
+		ReadTimeout:  3 * time.Second,
+		WriteTimeout: 3 * time.Second,
+	})
+	defer rdb.Close()
+
+	// Контекст с таймаутом для всех операций
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Получение аргументов командной строки
+	if len(os.Args) > 1 {
+		// Проверка подключения с выводом статуса
+		fmt.Println("Проверка подключения к Redis...")
+		_, err := rdb.Ping(ctx).Result()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Ошибка подключения к Redis: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("Подключение успешно!")
+		// Выполнение команды Redis
+		cmd := os.Args[1]
+		args := os.Args[2:]
+
+		var result interface{}
+
+		switch cmd {
+		case "PING":
+			result, err = rdb.Ping(ctx).Result()
+		case "SET":
+			if len(args) < 2 {
+				fmt.Println("Использование: SET <key> <value>")
+				os.Exit(1)
+			}
+			err = rdb.Set(ctx, args[0], args[1], 0).Err()
+			if err == nil {
+				result = "OK"
+			}
+		case "GET":
+			if len(args) < 1 {
+				fmt.Println("Использование: GET <key>")
+				os.Exit(1)
+			}
+			result, err = rdb.Get(ctx, args[0]).Result()
+		case "DEL":
+			if len(args) < 1 {
+				fmt.Println("Использование: DEL <key>")
+				os.Exit(1)
+			}
+			result, err = rdb.Del(ctx, args...).Result()
+		case "KEYS":
+			pattern := "*"
+			if len(args) > 0 {
+				pattern = args[0]
+			}
+			result, err = rdb.Keys(ctx, pattern).Result()
+		case "FLUSHDB":
+			err = rdb.FlushDB(ctx).Err()
+			if err == nil {
+				result = "OK"
+			}
+		default:
+			fmt.Fprintf(os.Stderr, "Неизвестная команда: %s\n", cmd)
+			fmt.Println("Поддерживаемые команды: PING, SET, GET, DEL, KEYS, FLUSHDB")
+			os.Exit(1)
+		}
+
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Ошибка выполнения команды: %v\n", err)
+			os.Exit(1)
+		}
+
+		fmt.Println(result)
+	} else {
+		// Интерактивный режим (простой)
+		fmt.Println("Интерактивный режим. Для выхода используйте Ctrl+C")
+		fmt.Println("Примеры команд:")
+		fmt.Println("  SET key value")
+		fmt.Println("  GET key")
+		fmt.Println("  DEL key")
+		fmt.Println("  KEYS *")
+
+		// Простой цикл для выполнения команд
+		for {
+			var input string
+			fmt.Print("redis> ")
+			fmt.Scanln(&input)
+
+			if input == "quit" || input == "exit" {
+				break
+			}
+		}
+	}
+}
+```
+
+go.mod:
+```
+module redis-client
+
+go 1.21
+
+require github.com/redis/go-redis/v9 v9.7.0
+
+require (
+	github.com/cespare/xxhash/v2 v2.2.0 // indirect
+	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
+)
+```
+
+go.sum
+```
+github.com/bsm/ginkgo/v2 v2.12.0 h1:Ny8MWAHyOepLGlLKYmXG4IEkioBysk6GpaRTLC8zwWs=
+github.com/bsm/ginkgo/v2 v2.12.0/go.mod h1:SwYbGRRDovPVboqFv0tPTcG1sN61LM1Z4ARdbAV9g4c=
+github.com/bsm/gomega v1.27.10 h1:yeMWxP2pV2fG3FgAODIY8EiRE3dy0aeFYt4l7wh6yKA=
+github.com/bsm/gomega v1.27.10/go.mod h1:JyEr/xRbxbtgWNi8tIEVPUYZ5Dzef52k01W3YH0H+O0=
+github.com/cespare/xxhash/v2 v2.2.0 h1:DC2CZ1Ep5Y4k3ZQ899DldepgrayRUGE6BBZ/cd9Cj44=
+github.com/cespare/xxhash/v2 v2.2.0/go.mod h1:VGX0DQ3Q6kWi7AoAeZDth3/j3BFtOZR5XLFGgcrjCOs=
+github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f h1:lO4WD4F/rVNCu3HqELle0jiPLLBs70cWOduZpkS1E78=
+github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f/go.mod h1:cuUVRXasLTGF7a8hSLbxyZXjz+1KgoB3wDUb6vlszIc=
+github.com/redis/go-redis/v9 v9.7.0 h1:HhLSs+B6O021gwzl+locl0zEDnyNkxMtf/Z3NNBMa9E=
+github.com/redis/go-redis/v9 v9.7.0/go.mod h1:f6zhXITC7JUJIlPEiBOTXxJgPLdZcA93GewI7inzyWw=
+```
+
+Dockerfile:
+```
+# Многостадийная сборка
+FROM golang:1.21-alpine AS builder
+
+# Установка необходимых инструментов
+RUN apk add --no-cache git ca-certificates tzdata
+
+WORKDIR /build
+
+# Копирование go.mod и go.sum (если есть)
+COPY go.mod go.sum* ./
+
+# Загрузка зависимостей
+RUN go mod download
+
+# Копирование исходного кода
+COPY main.go .
+
+# Обновление зависимостей после копирования кода
+RUN go mod tidy
+
+# Сборка приложения
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o redis-client main.go
+
+# Финальный образ
+FROM alpine:latest
+
+# Установка CA сертификатов для TLS
+RUN apk --no-cache add ca-certificates
+
+WORKDIR /app
+
+# Копирование бинарника из builder
+COPY --from=builder /build/redis-client .
+
+# Переменная окружения для выбора Redis хоста
+# REDIS_HOST может быть redis1.apatsev.org.ru или redis2.apatsev.org.ru
+ENV REDIS_HOST=redis1.apatsev.org.ru
+ENV REDIS_PORT=443
+
+# Исполняемый файл
+ENTRYPOINT ["/app/redis-client"]
+CMD []
+```
+
 Для тестирования используется готовый Docker‑образ `ghcr.io/patsevanton/gateway-api-tcproute-redis:1.8.0`.
 
 ### Установка `app1`/`app2` (клиенты) с Root CA из Kubernetes Secret
