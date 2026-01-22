@@ -42,26 +42,6 @@ resource "yandex_dns_recordset" "redis2" {
   depends_on = [yandex_vpc_address.addr]
 }
 
-resource "yandex_dns_recordset" "postgres1" {
-  zone_id = yandex_dns_zone.apatsev-org-ru.id
-  name    = "postgres1.apatsev.org.ru."
-  type    = "A"
-  ttl     = 200
-  data    = [yandex_vpc_address.addr.external_ipv4_address[0].address]
-
-  depends_on = [yandex_vpc_address.addr]
-}
-
-resource "yandex_dns_recordset" "postgres2" {
-  zone_id = yandex_dns_zone.apatsev-org-ru.id
-  name    = "postgres2.apatsev.org.ru."
-  type    = "A"
-  ttl     = 200
-  data    = [yandex_vpc_address.addr.external_ipv4_address[0].address]
-
-  depends_on = [yandex_vpc_address.addr]
-}
-
 output "gateway_ip" {
   description = "Статический IP адрес для Envoy Gateway LoadBalancer"
   value       = yandex_vpc_address.addr.external_ipv4_address[0].address
