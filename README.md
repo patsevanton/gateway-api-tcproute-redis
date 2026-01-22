@@ -460,33 +460,34 @@ kubectl describe tcproute postgres2-tcproute -n default
 GATEWAY_IP=$(kubectl get gateway eg-redis1 -n default -o jsonpath='{.status.addresses[0].value}')
 
 # Тест 1: TLS handshake + SNI (сертификат отдаётся Gateway, TLS терминируется на Gateway)
-openssl s_client -connect $GATEWAY_IP:443 \
+timeout 8s openssl s_client -connect "$GATEWAY_IP:443" \
   -servername redis1.apatsev.org.ru \
-  -showcerts
+  -CAfile /tmp/gateway-ca.crt \
+  -showcerts </dev/null || true
 
 # Тест 2: Redis 1 через TLS терминацию на Gateway (отправляем Redis RESP поверх TLS до Gateway)
-(echo -e "PING\r\n"; sleep 1) | openssl s_client -connect $GATEWAY_IP:443 \
+printf '*1\r\n$4\r\nPING\r\n' | timeout 8s openssl s_client -connect "$GATEWAY_IP:443" \
   -servername redis1.apatsev.org.ru \
   -CAfile /tmp/gateway-ca.crt \
-  -quiet 2>/dev/null
+  -quiet 2>/dev/null | sed -n '1p' || true
 
 # Тест 3: Redis 2 через TLS терминацию на Gateway
-(echo -e "PING\r\n"; sleep 1) | openssl s_client -connect $GATEWAY_IP:443 \
+printf '*1\r\n$4\r\nPING\r\n' | timeout 8s openssl s_client -connect "$GATEWAY_IP:443" \
   -servername redis2.apatsev.org.ru \
   -CAfile /tmp/gateway-ca.crt \
-  -quiet 2>/dev/null
+  -quiet 2>/dev/null | sed -n '1p' || true
 
 # Тест 4: TLS handshake для PostgreSQL 1 (проверяем SNI/сертификат)
-openssl s_client -connect $GATEWAY_IP:443 \
+timeout 8s openssl s_client -connect "$GATEWAY_IP:443" \
   -servername postgres1.apatsev.org.ru \
   -CAfile /tmp/gateway-ca.crt \
-  -quiet
+  -brief </dev/null || true
 
 # Тест 5: TLS handshake для PostgreSQL 2 (проверяем SNI/сертификат)
-openssl s_client -connect $GATEWAY_IP:443 \
+timeout 8s openssl s_client -connect "$GATEWAY_IP:443" \
   -servername postgres2.apatsev.org.ru \
   -CAfile /tmp/gateway-ca.crt \
-  -quiet
+  -brief </dev/null || true
 
 # Ожидаемый ответ: +PONG (Redis протокол)
 # Если получен ответ PONG, это подтверждает:
@@ -769,14 +770,6 @@ CMD []
 `app1` и `app2` подключаются к Redis через TLS (до Gateway) и **проверяют сертификат** по Root CA из Kubernetes Secret `gateway-root-ca` (ключ `ca.crt`).
 
 Secret `gateway-root-ca` создаётся на шаге **«Генерация TLS‑сертификатов»** командой `./scripts/generate-tls-certs.sh`.
-
-Если Root CA уже есть и нужно создать Secret вручную:
-
-```bash
-kubectl create secret generic gateway-root-ca \
-  --from-file=ca.crt=/path/to/ca.crt \
-  --dry-run=client -o yaml | kubectl apply -f -
-```
 
 ### Запись данных в Redis
 
