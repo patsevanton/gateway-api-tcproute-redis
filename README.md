@@ -288,12 +288,6 @@ kubectl describe gateway eg-redis2 -n default | grep -C 1 Accepted
 
 **Ожидаемый результат:** Gateway‑ресурсы созданы, статус `PROGRAMMED: True` (в выводе `kubectl get`), условие `Accepted: True` (в условиях Gateway), адрес назначен (статический IP из Terraform).
 
-#### Получение IP‑адреса Gateway
-
-```bash
-GATEWAY_IP=$(kubectl get gateway eg-redis1 -n default -o jsonpath='{.status.addresses[0].value}' 2>/dev/null)
-echo "Gateway IP: $GATEWAY_IP"
-```
 
 #### Создание тестовых backend‑приложений (Redis 1 и Redis 2)
 
