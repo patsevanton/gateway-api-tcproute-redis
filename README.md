@@ -216,7 +216,7 @@ kubectl get gatewayclass envoy
 
 **Ожидаемый результат:** GatewayClass создан со статусом `ACCEPTED: True`.
 
-### 5. Развертывание тестовых ресурсов
+### 5. Развертывание ресурсов Gateway API
 
 #### Создание Gateway‑ресурсов с TLS Terminate (`Terminate`)
 
